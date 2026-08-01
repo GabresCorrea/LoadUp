@@ -1299,37 +1299,71 @@ function getFCMax(){
   return Math.round(208-0.7*age); // fórmula de Tanaka (mais precisa que 220-idade)
 }
 
-// Migração de dados: garante compatibilidade entre versões
+// Migração de dados: garante compatibilidade entre versões.
+// BLINDADA: recupera campo-a-campo. Se uma seção estiver corrompida
+// (tipo errado), cai só o default DAQUELA seção — nunca reseta tudo.
 function migrateData(s){
-  if(!s)return DEF;
-  // Garante campos novos no estado
-  if(!s.restSeconds)s.restSeconds=90;
-  if(!s.medals)s.medals=[];
-  if(!s.prs)s.prs={};
-  if(!s.stats)s.stats={totalWorkouts:0,totalPRs:0,maxVolume:0,totalRoutines:0};
-  if(!s.weeklyGoals)s.weeklyGoals={};
-  if(!s.cardioLog)s.cardioLog=[];
-  if(s.user&&!s.user.profile)s.user.profile={weight:'',height:'',age:'',sex:''};
-  if(s.user&&!s.user.weightHistory)s.user.weightHistory=[];
+  if(!s||typeof s!=='object'||Array.isArray(s))return {...DEF};
+  const isArr=Array.isArray, isObj=v=>v&&typeof v==='object'&&!isArr(v);
+
+  // Escalares e coleções de topo: valida o tipo esperado; se não bater, usa o default.
+  if(typeof s.restSeconds!=='number'||!(s.restSeconds>0))s.restSeconds=90;
+  if(!isArr(s.medals))s.medals=[];
+  if(!isObj(s.prs))s.prs={};
+  if(!isObj(s.stats))s.stats={totalWorkouts:0,totalPRs:0,maxVolume:0,totalRoutines:0};
+  else{
+    // Garante que cada contador exista e seja número
+    ['totalWorkouts','totalPRs','maxVolume','totalRoutines'].forEach(k=>{
+      if(typeof s.stats[k]!=='number'||isNaN(s.stats[k]))s.stats[k]=0;
+    });
+  }
+  if(!isObj(s.weeklyGoals))s.weeklyGoals={};
+  if(!isArr(s.cardioLog))s.cardioLog=[];
+  if(!isArr(s.routines))s.routines=[];
+  if(!isArr(s.log))s.log=[];
   if(s.seenTutorial===undefined)s.seenTutorial=false;
-  // Migra séries antigas sem campo 'type' e exercícios sem notes/superset
-  (s.routines||[]).forEach(r=>{
-    (r.exercises||[]).forEach(ex=>{
-      if(ex.note===undefined)ex.note='';
+
+  // user: pode ser null (não cadastrado). Se existir, precisa ser objeto com nome válido.
+  if(s.user!==null){
+    if(!isObj(s.user)||typeof s.user.name!=='string'||!s.user.name.trim()){
+      // Estrutura de usuário irrecuperável: trata como não cadastrado
+      s.user=null;
+    }else{
+      if(!isObj(s.user.profile))s.user.profile={weight:'',height:'',age:'',sex:''};
+      if(!isArr(s.user.weightHistory))s.user.weightHistory=[];
+    }
+  }
+
+  // Saneia rotinas: descarta entradas malformadas em vez de deixar quebrar telas depois.
+  s.routines=s.routines.filter(isObj).map(r=>{
+    if(!isArr(r.exercises))r.exercises=[];
+    r.exercises=r.exercises.filter(isObj).map(ex=>{
+      if(ex.note===undefined||typeof ex.note!=='string')ex.note='';
       if(ex.superset===undefined)ex.superset=null;
-      (ex.sets||[]).forEach(set=>{
+      if(!isArr(ex.sets))ex.sets=[];
+      ex.sets=ex.sets.filter(isObj).map(set=>{
         if(!set.type)set.type='valida';
+        return set;
       });
+      return ex;
     });
+    return r;
   });
-  // Migra logs antigos
-  (s.log||[]).forEach(entry=>{
-    (entry.exercises||[]).forEach(ex=>{
-      (ex.sets||[]).forEach(set=>{
+
+  // Saneia histórico de logs.
+  s.log=s.log.filter(isObj).map(entry=>{
+    if(!isArr(entry.exercises))entry.exercises=[];
+    entry.exercises=entry.exercises.filter(isObj).map(ex=>{
+      if(!isArr(ex.sets))ex.sets=[];
+      ex.sets=ex.sets.filter(isObj).map(set=>{
         if(!set.type)set.type='valida';
+        return set;
       });
+      return ex;
     });
+    return entry;
   });
+
   return s;
 }
 
@@ -1350,7 +1384,24 @@ function getEquipment(name){
 const EQUIP_LIST=['Barra','Halter','Máquina','Cabo','Peso corporal','Smith','Kettlebell','Elástico','Outro'];
 const SUPERSET_COLORS=['#e67e22','#16a085','#8e44ad','#2980b9','#c0392b','#27ae60'];
 
-function load(){try{return migrateData(JSON.parse(localStorage.getItem('loadup4')||'null')||DEF)}catch{return DEF}}
+function load(){
+  const raw=localStorage.getItem('loadup4');
+  if(raw==null)return {...DEF};
+  try{
+    return migrateData(JSON.parse(raw)||DEF);
+  }catch(e){
+    // JSON realmente ilegível: NÃO sobrescreve. Guarda uma cópia bruta para
+    // eventual recuperação manual e avisa (uma vez), evitando perda silenciosa.
+    try{
+      if(!localStorage.getItem('loadup4_corrupted'))localStorage.setItem('loadup4_corrupted',raw);
+    }catch(_){/* storage cheio: ignora */}
+    if(!window._loadWarned){
+      window._loadWarned=true;
+      setTimeout(()=>{try{notify('⚠ Dados locais ilegíveis. Restaure um backup em Perfil → Backup.');}catch(_){}} ,1500);
+    }
+    return {...DEF};
+  }
+}
 function save(s){
   try{
     localStorage.setItem('loadup4',JSON.stringify(s));
@@ -1395,13 +1446,24 @@ function importData(file){
   reader.onload=e=>{
     try{
       const data=JSON.parse(e.target.result);
-      if(!data||typeof data!=='object'||!Array.isArray(data.routines)){
-        notify('Arquivo inválido.');return;
+      // Validação estrutural mínima: precisa ser um objeto de estado plausível.
+      // Exige as seções-chave com o tipo certo; o migrateData saneia o resto.
+      const isObj=v=>v&&typeof v==='object'&&!Array.isArray(v);
+      const ok = isObj(data)
+        && Array.isArray(data.routines)
+        && (data.log===undefined || Array.isArray(data.log))
+        && (data.user===undefined || data.user===null || isObj(data.user));
+      if(!ok){
+        notify('Arquivo inválido: não parece um backup do LoadUp.');return;
       }
       openConfirm('Importar backup?','Isso substituirá todos os dados atuais do app.',()=>{
-        S=migrateData(data);save(S);notify('Backup importado! ✓');render();
+        try{
+          S=migrateData(data);save(S);notify('Backup importado! ✓');render();
+        }catch(err2){
+          notify('Não foi possível importar: backup corrompido.');
+        }
       });
-    }catch(err){notify('Erro ao ler o arquivo.');}
+    }catch(err){notify('Erro ao ler o arquivo (JSON inválido).');}
   };
   reader.onerror=()=>notify('Erro ao ler o arquivo.');
   reader.readAsText(file);
@@ -2190,9 +2252,19 @@ const fbAuth=firebase.auth();
 const fbDb=firebase.firestore();
 let fbUser=null;
 
+// Considera o estado local "vazio" só se não houver rotinas NEM histórico.
+// (stats.totalWorkouts=0 não bastava: o usuário pode ter criado rotinas
+//  offline sem ainda ter finalizado nenhum treino.)
+function isLocalStateEmpty(){
+  return (!S.routines||S.routines.length===0)
+      && (!S.log||S.log.length===0)
+      && (!S.cardioLog||S.cardioLog.length===0);
+}
 fbAuth.onAuthStateChanged(user=>{
   fbUser=user;
-  if(user&&!S.stats.totalWorkouts)cloudLoad(true);
+  // Restaura em silêncio apenas quando não há nada local a perder.
+  // Havendo dados locais, cloudLoad pedirá confirmação (não sobrescreve cego).
+  if(user)cloudLoad(true);
   if(document.getElementById('fb-user-info')||document.getElementById('cloud-signin'))render();
 });
 
@@ -2234,7 +2306,12 @@ async function cloudLoad(silent=false){
       localStorage.setItem('loadup4',dataStr);
       S=load();notify('✅ Dados restaurados!');render();
     };
-    if(silent){doRestore();}
+    if(silent){
+      // Modo automático (logou): só restaura cego se não há dados locais a perder.
+      // Havendo dados locais, promove para confirmação em vez de sobrescrever.
+      if(isLocalStateEmpty()){doRestore();}
+      else{openConfirm('Restaurar backup da nuvem?','Há um backup de '+new Date(savedAt).toLocaleString('pt-BR')+'. Isso substituirá os dados que já existem neste dispositivo.',doRestore,{okLabel:'Restaurar'});}
+    }
     else{openConfirm('Restaurar backup?','Backup de '+new Date(savedAt).toLocaleString('pt-BR')+'. Isso substituirá os dados locais.',doRestore,{okLabel:'Restaurar'});}
   }catch(e){if(!silent)notify('Erro: '+e.message);}
 }
@@ -4337,7 +4414,7 @@ function buildNav(active){
   return`<nav class="bnav">${items.map(it=>`<button class="nav-item ${it.id===active?'nav-on':'nav-off'}" data-nav="${it.id}">${it.svg}<span class="nav-lbl">${it.lbl}</span></button>`).join('')}</nav>`;
 }
 
-function esc(s){if(s==null)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+function esc(s){if(s==null)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
 function q(s){return document.querySelector(s)}
 function qa(s){return document.querySelectorAll(s)}
 
