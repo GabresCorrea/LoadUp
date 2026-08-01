@@ -60,7 +60,7 @@ body{height:100%;height:100dvh;background:var(--bg);color:var(--text);font-famil
 .s-sub{color:var(--t3);font-size:10px;letter-spacing:7px;margin-top:4px;margin-bottom:48px}
 .spinner{width:26px;height:26px;border:2px solid #1e1e1e;border-top-color:var(--gold);border-radius:50%;animation:spin .85s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
-.cwrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;
+.cwrap{min-height:100vh;min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:24px;
   padding-top:calc(var(--st)+24px);padding-bottom:calc(var(--sb)+24px);
   background:radial-gradient(ellipse at 50% 28%,#1c1200 0%,var(--bg) 62%)}
 .card{background:var(--bg2);border:1px solid var(--border);border-radius:20px;padding:32px 24px;width:100%}
@@ -409,6 +409,10 @@ canvas.chart{width:100%;height:160px;display:block}
 .exec-set-idx{font-size:15px;font-weight:700;color:var(--gold);font-family:'Oswald',sans-serif}
 .exec-set-type{font-size:8px;letter-spacing:.5px;font-weight:700}
 .exec-prev-ref{font-size:10px;color:#6a6a6a;text-align:center;margin-top:3px;letter-spacing:.3px}
+/* Nome do exercício "A SEGUIR": até 2 linhas em telas estreitas, sem cortar cedo */
+.next-ex-name{font-size:13px;font-weight:700;color:#555;flex:1;min-width:0;line-height:1.25;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+  overflow-wrap:anywhere;word-break:break-word}
 /* Bottom nav */
 .exec-nav{
   position:fixed;bottom:0;left:50%;transform:translateX(-50%);
@@ -2949,7 +2953,7 @@ function buildExecMode(r){
   const nextPreview=nextEx?
     '<div style="margin-top:16px;padding:10px 12px;background:#0a0a0a;border-radius:10px;border:1px solid #111;display:flex;align-items:center;gap:10px">'+
       '<div style="font-size:9px;color:var(--t3);letter-spacing:2px;flex-shrink:0">A SEGUIR</div>'+
-      '<div style="font-size:13px;font-weight:700;color:#555;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(nextEx.name)+'</div>'+
+      '<div class="next-ex-name">'+esc(nextEx.name)+'</div>'+
       '<div style="font-size:11px;color:#888">'+nextEx.sets.length+' séries</div>'+
     '</div>':'';
 
