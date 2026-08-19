@@ -1178,7 +1178,7 @@ const MEDALS=[
   {id:'three_routines',icon:'📋',name:'Estrategista',desc:'Crie 3 rotinas',check:s=>s.totalRoutines>=3},
 ];
 
-const DEF={user:null,routines:[],log:[],cardioLog:[],prs:{},stats:{totalWorkouts:0,totalPRs:0,maxVolume:0,totalRoutines:0},medals:[],restSeconds:90,weeklyGoals:{}};
+const DEF={user:null,routines:[],log:[],cardioLog:[],prs:{},stats:{totalWorkouts:0,totalPRs:0,maxVolume:0,totalRoutines:0},medals:[],restSeconds:90,weeklyGoals:{},activeSession:null};
 
 // Modalidades de cardio (id, nome, ícone, campo de distância?)
 const CARDIO_TYPES=[
@@ -1327,6 +1327,19 @@ function migrateData(s){
   if(!isArr(s.log))s.log=[];
   if(s.seenTutorial===undefined)s.seenTutorial=false;
 
+  // Sessão de treino em andamento (permite retomar caso o app feche sem finalizar)
+  if(s.activeSession!==null&&!isObj(s.activeSession))s.activeSession=null;
+  if(isObj(s.activeSession)){
+    if(typeof s.activeSession.routineId!=='string')s.activeSession=null;
+    else{
+      if(typeof s.activeSession.exIdx!=='number')s.activeSession.exIdx=0;
+      if(!isObj(s.activeSession.setsDone))s.activeSession.setsDone={};
+      if(!isObj(s.activeSession.expandedCards))s.activeSession.expandedCards={};
+      if(typeof s.activeSession.workoutStart!=='number')s.activeSession.workoutStart=null;
+      s.activeSession.workoutMode=!!s.activeSession.workoutMode;
+    }
+  }
+
   // user: pode ser null (não cadastrado). Se existir, precisa ser objeto com nome válido.
   if(s.user!==null){
     if(!isObj(s.user)||typeof s.user.name!=='string'||!s.user.name.trim()){
@@ -1409,6 +1422,9 @@ function load(){
 function save(s){
   try{
     localStorage.setItem('loadup4',JSON.stringify(s));
+    // Marca quando foi o último salvamento local, para não perguntar à toa se
+    // deve restaurar o backup da nuvem quando não há nada mais novo lá.
+    try{localStorage.setItem('loadup4_savedAt',new Date().toISOString());}catch(_){}
     return true;
   }catch(e){
     // Armazenamento cheio ou modo privado: avisa o usuário (uma vez por sessão)
@@ -2045,6 +2061,7 @@ function startWorkoutTimer(){
   if(_workoutTimerRunning)return;
   _workoutTimerRunning=true;_workoutElapsed=0;
   _workoutStart=Date.now();
+  syncActiveSession();save(S);
   clearInterval(_workoutTimerInterval);
   _workoutTimerInterval=setInterval(()=>{
     _workoutElapsed=Math.floor((Date.now()-_workoutStart)/1000);
@@ -2060,6 +2077,16 @@ function formatWorkoutTime(s){
   const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sec=s%60;
   if(h>0)return`${h}h ${m.toString().padStart(2,'0')}m`;
   return`${m}:${sec.toString().padStart(2,'0')}`;
+}
+// Espelha o estado do treino em andamento dentro de S (persistido), para que um
+// fechamento inesperado do app (swipe, OS matando o processo, crash) não apague
+// as séries já marcadas nem o exercício/tempo em que o usuário estava.
+function syncActiveSession(){
+  if(page==='routine'&&activeRid&&S.routines.find(r=>r.id===activeRid)){
+    S.activeSession={routineId:activeRid,exIdx:workoutExIdx,workoutMode,setsDone:window._setsDone||{},expandedCards:window._expandedCards||{},workoutStart:_workoutTimerRunning?_workoutStart:null};
+  }else{
+    S.activeSession=null;
+  }
 }
 // Parse "1h 30m", "1:30", "90" (minutes) → seconds
 function parseDurationInput(v){
@@ -2314,7 +2341,15 @@ async function cloudLoad(silent=false){
       // Modo automático (logou): só restaura cego se não há dados locais a perder.
       // Havendo dados locais, promove para confirmação em vez de sobrescrever.
       if(isLocalStateEmpty()){doRestore();}
-      else{openConfirm('Restaurar backup da nuvem?','Há um backup de '+new Date(savedAt).toLocaleString('pt-BR')+'. Isso substituirá os dados que já existem neste dispositivo.',doRestore,{okLabel:'Restaurar'});}
+      else{
+        // Só interrompe o usuário se o backup da nuvem for realmente mais novo
+        // que o último salvamento feito neste aparelho. Sem isso, o diálogo
+        // reaparecia toda vez que o app recarregava, mesmo sem nada nem para
+        // restaurar (nada tinha mudado desde a última vez).
+        const localSavedAt=localStorage.getItem('loadup4_savedAt');
+        const cloudIsNewer=!localSavedAt||!savedAt||new Date(savedAt)>new Date(localSavedAt);
+        if(cloudIsNewer)openConfirm('Restaurar backup da nuvem?','Há um backup de '+new Date(savedAt).toLocaleString('pt-BR')+'. Isso substituirá os dados que já existem neste dispositivo.',doRestore,{okLabel:'Restaurar'});
+      }
     }
     else{openConfirm('Restaurar backup?','Backup de '+new Date(savedAt).toLocaleString('pt-BR')+'. Isso substituirá os dados locais.',doRestore,{okLabel:'Restaurar'});}
   }catch(e){if(!silent)notify('Erro: '+e.message);}
@@ -4668,19 +4703,19 @@ function bind(){
   q('#xr')?.addEventListener('click',()=>{editingRid=null;render()});
   // Routine
   q('#bk')?.addEventListener('click',()=>{
-    const doExit=()=>{window._setsDone={};window._expandedCards={};stopWorkoutTimer();_workoutElapsed=0;_workoutTimerRunning=false;workoutMode=false;workoutExIdx=0;page='home';render()};
+    const doExit=()=>{window._setsDone={};window._expandedCards={};stopWorkoutTimer();_workoutElapsed=0;_workoutTimerRunning=false;workoutMode=false;workoutExIdx=0;page='home';S.activeSession=null;save(S);render()};
     // Há progresso em andamento? (alguma série marcada ou cronômetro rodando)
     const hasProgress=_workoutTimerRunning||_workoutElapsed>0||(window._setsDone&&Object.values(window._setsDone).some(arr=>Array.isArray(arr)&&arr.some(Boolean)));
     if(hasProgress)openConfirm('Sair do treino?','Você tem um treino em andamento. Se sair agora, o progresso desta sessão (séries marcadas e tempo) será perdido.',doExit,{okLabel:'Sair mesmo assim',danger:true});
     else doExit();
   });
-  q('#enter-exec')?.addEventListener('click',()=>{workoutMode=true;workoutExIdx=0;render()});
-  q('#exit-exec')?.addEventListener('click',()=>{workoutMode=false;render()});
-  q('#exec-prev')?.addEventListener('click',()=>{if(workoutExIdx>0){workoutExIdx--;render()}});
+  q('#enter-exec')?.addEventListener('click',()=>{workoutMode=true;workoutExIdx=0;syncActiveSession();saveDebounced(S);render()});
+  q('#exit-exec')?.addEventListener('click',()=>{workoutMode=false;syncActiveSession();saveDebounced(S);render()});
+  q('#exec-prev')?.addEventListener('click',()=>{if(workoutExIdx>0){workoutExIdx--;syncActiveSession();saveDebounced(S);render()}});
   q('#exec-next')?.addEventListener('click',()=>{
     const r=S.routines.find(x=>x.id===activeRid);
     const exs=r?r.exercises.filter(e=>e.name):[];
-    if(workoutExIdx<exs.length-1){workoutExIdx++;render();}
+    if(workoutExIdx<exs.length-1){workoutExIdx++;syncActiveSession();saveDebounced(S);render();}
   });
   q('#exec-fin')?.addEventListener('click',doFinish);
   q('#exec-fin2')?.addEventListener('click',doFinish);
@@ -4716,6 +4751,7 @@ function bind(){
     const idx=parseInt(si);
     const wasDone=window._setsDone[donekey][idx]===true;
     window._setsDone[donekey][idx]=!wasDone;
+    syncActiveSession();
     // Save input values before any DOM change
     const rCard=b.closest('.excard')||b.closest('.exec-body');
     if(rCard){
@@ -5470,6 +5506,7 @@ function doFinish(){
   S.stats.totalWorkouts++;S.stats.totalPRs+=prCount;S.stats.maxVolume=Math.max(S.stats.maxVolume,volume);
   const earned=checkMedals(S.stats,S.medals);earned.forEach(m=>S.medals.push(m.id));
   finishData={routineName:r.name,exercises:JSON.parse(JSON.stringify(r.exercises)),volume,prCount,prExercises,validSets,duration:workoutDuration,prevLog:prevLog?JSON.parse(JSON.stringify(prevLog)):null};
+  S.activeSession=null;
   save(S);if(earned.length)newMedals=earned;page='finish';render();
   if(fbUser)cloudSave();
   // Feedback tátil: padrão comemorativo mais forte se bateu PR, suave se não
@@ -5489,11 +5526,46 @@ function doFinish(){
     document.head.appendChild(el);
   }catch(e){}
 })();
+// Retoma um treino em andamento se o app fechou/reiniciou antes de finalizar
+// (protege contra fechamento acidental). Ignora sessões muito antigas (>12h)
+// para não jogar o usuário de volta num treino que ele já esqueceu.
+if(S.activeSession&&S.activeSession.routineId&&S.routines.find(r=>r.id===S.activeSession.routineId)){
+  const sessAgeMs=S.activeSession.workoutStart?(Date.now()-S.activeSession.workoutStart):0;
+  if(sessAgeMs>12*3600*1000){
+    S.activeSession=null;save(S);
+  }else{
+    activeRid=S.activeSession.routineId;
+    workoutExIdx=S.activeSession.exIdx||0;
+    workoutMode=!!S.activeSession.workoutMode;
+    window._setsDone=S.activeSession.setsDone||{};
+    window._expandedCards=S.activeSession.expandedCards||{};
+    page='routine';
+    if(S.activeSession.workoutStart){
+      _workoutStart=S.activeSession.workoutStart;
+      _workoutElapsed=Math.floor((Date.now()-_workoutStart)/1000);
+      _workoutTimerRunning=true;
+      clearInterval(_workoutTimerInterval);
+      _workoutTimerInterval=setInterval(()=>{
+        _workoutElapsed=Math.floor((Date.now()-_workoutStart)/1000);
+        const el=document.getElementById('workout-elapsed');
+        if(el)el.textContent=formatWorkoutTime(_workoutElapsed);
+      },1000);
+    }
+    setTimeout(()=>{try{notify('↩️ Treino retomado — seu progresso foi recuperado.');}catch(e){}},1600);
+  }
+}
 render();
 setTimeout(()=>{if(page==='splash'){page=S.user?'home':'register';if(S.user&&!S.seenTutorial)tutorialStep=0;render()}},1400);
 if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
 // Recalcula o timer ao voltar de app minimizado/aba em segundo plano
 document.addEventListener('visibilitychange',()=>{
+  if(document.hidden){
+    // App indo para segundo plano (ou podendo ser encerrado pelo SO a qualquer
+    // momento): grava agora, não espera o debounce — evita perder o que só
+    // estava em memória (série marcada, exercício atual, cronômetro).
+    try{syncActiveSession();flushSave();}catch(e){}
+    return;
+  }
   if(!document.hidden&&timerActive){
     // Recalcula imediatamente o tempo restante a partir do timestamp
     tickTimer();
@@ -5507,6 +5579,9 @@ document.addEventListener('visibilitychange',()=>{
   }
 });
 window.addEventListener('pageshow',()=>{if(timerActive)tickTimer();if(cardioSession&&cardioRunning)cardioTick();});
+// Último recurso: alguns navegadores/PWAs disparam pagehide sem passar por
+// visibilitychange ao fechar de fato — garante o mesmo flush aqui também.
+window.addEventListener('pagehide',()=>{try{syncActiveSession();flushSave();}catch(e){}});
 
 // ══════════════════════════════════════════════════
 // SUÍTE DE TESTES INTERNA (chame runSelfTests() no console do navegador)
