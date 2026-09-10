@@ -90,7 +90,7 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
 .btn-sd{background:var(--bg3);color:var(--t2);border:1px solid var(--border2);border-radius:7px;padding:7px 11px;font-size:13px;cursor:pointer}
 /* Botões de ação com ícone SVG: centralização consistente */
 .btn-sg svg,.btn-sd svg{display:block}
-.rrow .btn-sg,.rrow .btn-sd{display:inline-flex;align-items:center;justify-content:center;min-width:38px}
+.rrow .btn-sg,.rrow .btn-sd{display:inline-flex;align-items:center;justify-content:center;min-width:40px;min-height:40px}
 .btn-back{background:none;border:none;color:var(--gold);font-size:13px;letter-spacing:1px;cursor:pointer;padding:0;font-family:'Barlow',sans-serif;font-weight:700;display:inline-flex;align-items:center;gap:5px}
 .btn-icon{background:none;border:none;cursor:pointer;padding:0}
 .btn-add{background:none;border:1px solid var(--gold);color:var(--gold);padding:5px 13px;border-radius:7px;font-size:11px;cursor:pointer;letter-spacing:1px;font-weight:700}
@@ -2850,7 +2850,7 @@ function buildHome(){
     <div class="sec-hdr"><span class="sec-title">RECENTE</span><button class="btn-add" id="go-hist">VER TUDO</button></div>
     ${recent.map(l=>`<div class="rcard" style="flex-direction:column;align-items:flex-start;gap:4px">
       <div style="display:flex;justify-content:space-between;width:100%"><span class="tg fw8" style="font-size:14px">${esc(l.routineName)}</span><span class="td txs">${new Date(l.date).toLocaleDateString('pt-BR')}</span></div>
-      <div class="ts td">Volume: <span style="color:#bbb">${l.volume.toFixed(1)} kg</span></div>
+      <div class="ts td">Volume: <span class="fw8" style="color:var(--text)">${l.volume.toFixed(1)} kg</span></div>
     </div>`).join('')}
   </div>`:''}
   </div>`;
@@ -3662,8 +3662,8 @@ function buildMuscles(){
   (weekTab===0?wvolHtml:'')+
   (weekTab===0?buildWeeklyLoadSection():'')+
   (weekTab===0?predHtml:'')+
-  (weekTab===0&&Object.keys(goals).length===0&&sorted.length===0?'<div class="empty">Complete um treino para ver! 💪</div>':
-    weekTab===1&&sorted.length===0?'<div class="empty">Complete um treino para ver! 💪</div>':`
+  (weekTab===0&&Object.keys(goals).length===0&&sorted.length===0?'<div class="empty"><div class="empty-ico">💪</div><div class="empty-title">Nada por aqui ainda</div><div class="empty-sub">Complete um treino para ver<br>seu volume por músculo</div></div>':
+    weekTab===1&&sorted.length===0?'<div class="empty"><div class="empty-ico">💪</div><div class="empty-title">Nada por aqui ainda</div><div class="empty-sub">Complete um treino para ver<br>seu volume por músculo</div></div>':`
   <div class="sec">
     <div class="sec-hdr">
       <span class="sec-title">${weekTab===0?'PROGRESSO SEMANAL':'SÉRIES POR MÚSCULO'}</span>
