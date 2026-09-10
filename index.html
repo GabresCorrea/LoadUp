@@ -4039,9 +4039,21 @@ function buildCardio(){
   if(cardioSession)return buildCardioSession();
   const recent=(S.cardioLog||[]).slice(0,30);
   const weekCut=startOfWeek();
+  const prevWeekCut=weekCut-7*86400000;
   const weekSessions=(S.cardioLog||[]).filter(c=>new Date(c.date).getTime()>=weekCut);
+  const prevWeekSessions=(S.cardioLog||[]).filter(c=>{const t=new Date(c.date).getTime();return t>=prevWeekCut&&t<weekCut});
   const weekMin=Math.round(weekSessions.reduce((a,c)=>a+(c.seconds||0),0)/60);
+  const prevWeekMin=Math.round(prevWeekSessions.reduce((a,c)=>a+(c.seconds||0),0)/60);
   const weekCal=weekSessions.reduce((a,c)=>a+(c.calories||0),0);
+  // Comparação direta com a semana passada: mais útil que só o total isolado.
+  let trendHtml='';
+  if(prevWeekMin>0){
+    const diffPct=Math.round(((weekMin-prevWeekMin)/prevWeekMin)*100);
+    const up=diffPct>0;
+    trendHtml=diffPct===0?'':'<span style="color:'+(up?'#4caf50':'#e74c3c')+';font-weight:700">'+(up?'▲':'▼')+' '+Math.abs(diffPct)+'%</span> vs. semana passada';
+  }else if(weekMin>0){
+    trendHtml='primeira semana com cardio registrado';
+  }
   const histHtml=recent.length?recent.map(c=>{
     const t=cardioTypeById(c.typeId);
     const d=new Date(c.date);
@@ -4065,15 +4077,17 @@ function buildCardio(){
 
   return`<div class="page pb80">
   <div class="hdr"><div class="hdr-title">CARDIO</div></div>
-  <div class="px16" style="display:flex;gap:10px;margin-bottom:14px">
-    <div class="stat-card f1"><div class="stat-val">${weekMin}</div><div class="stat-lbl">MIN / SEMANA</div></div>
+  <div class="px16" style="display:flex;gap:8px;margin-bottom:6px">
+    <div class="stat-card f1"><div class="stat-val">${weekMin}</div><div class="stat-lbl">MIN SEMANA</div></div>
     <div class="stat-card f1"><div class="stat-val">${weekSessions.length}</div><div class="stat-lbl">SESSÕES</div></div>
     <div class="stat-card f1"><div class="stat-val">${weekCal}</div><div class="stat-lbl">KCAL</div></div>
   </div>
-  <div class="px16" style="margin-top:-6px;margin-bottom:12px"><div style="font-size:10px;color:var(--t3);letter-spacing:.5px;text-align:center">↻ Os números da semana zeram todo domingo</div></div>
-  <div class="px16"><button class="btn-gold" id="cardio-new">+ INICIAR CARDIO</button></div>
-  <div class="px16 mt8"><button class="btn-dark" id="cardio-manual" style="display:inline-flex;align-items:center;justify-content:center;gap:6px">${icon('edit',15)} Registrar manualmente</button></div>
-  <div class="sec mt16"><div class="sec-hdr"><span class="sec-title">HISTÓRICO</span></div>
+  ${trendHtml?`<div class="px16" style="margin-bottom:12px"><div style="font-size:11px;color:var(--t3);text-align:center">${trendHtml}</div></div>`:'<div class="mt8"></div>'}
+  <div class="px16" style="display:flex;gap:8px">
+    <button class="btn-gold f1" id="cardio-new">+ INICIAR</button>
+    <button class="btn-dark f1" id="cardio-manual" style="display:inline-flex;align-items:center;justify-content:center;gap:6px">${icon('edit',15)} Manual</button>
+  </div>
+  <div class="sec mt16">
     <div class="px16">${histHtml}</div>
   </div>
   </div>
