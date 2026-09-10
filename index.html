@@ -3755,120 +3755,126 @@ function buildHistory(){
   }).join('')}</div></div>`;
 }
 
+// Gráfico de linha (zig-zag) simples, em SVG, para a evolução de peso.
+// Direto ao ponto: só a linha, os pontos e o essencial — sem barras espaçadas.
+function buildWeightLineChart(wh){
+  const W=300,H=72,padL=4,padR=4,padT=10,padB=16;
+  const recent=wh.slice(-12);
+  const weights=recent.map(e=>e.weight);
+  const maxW=Math.max(...weights),minW=Math.min(...weights);
+  const range=(maxW-minW)||1;
+  const n=recent.length;
+  const x=i=>padL+(n<=1?(W-padL-padR)/2:(i/(n-1))*(W-padL-padR));
+  const y=w=>padT+(H-padT-padB)*(1-(w-minW)/range);
+  const pts=recent.map((e,i)=>[x(i),y(e.weight)]);
+  const poly=pts.map(p=>p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ');
+  const dots=pts.map((p,i)=>{
+    const isLast=i===pts.length-1;
+    return '<circle cx="'+p[0].toFixed(1)+'" cy="'+p[1].toFixed(1)+'" r="'+(isLast?3.5:2)+'" fill="'+(isLast?'#fff':'var(--gold)')+'"'+(isLast?' stroke="var(--gold)" stroke-width="1.5"':'')+'/>';
+  }).join('');
+  const firstD=new Date(recent[0].date),lastD=new Date(recent[recent.length-1].date);
+  const fmt=d=>('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2);
+  return '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:72px;display:block;overflow:visible">'+
+    '<line x1="'+padL+'" y1="'+(H-padB+0.5)+'" x2="'+(W-padR)+'" y2="'+(H-padB+0.5)+'" stroke="#1a1a1a" stroke-width="1"/>'+
+    '<polyline points="'+poly+'" fill="none" stroke="var(--gold)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>'+
+    dots+
+    (n>1?'<text x="'+padL+'" y="'+H+'" font-size="8" fill="#666" font-family="Barlow,sans-serif">'+fmt(firstD)+'</text>'+
+      '<text x="'+(W-padR)+'" y="'+H+'" font-size="8" fill="#666" font-family="Barlow,sans-serif" text-anchor="end">'+fmt(lastD)+'</text>':'')+
+  '</svg>';
+}
+
 function buildProfile(){
   return`<div class="page pb80">
   <div class="hdr"><button class="btn-back" id="bkp">${icon("back",16)} VOLTAR</button><div class="hdr-title">PERFIL</div></div>
-  <div style="text-align:center;padding:28px 24px 16px">
+  <div style="text-align:center;padding:20px 24px 14px">
     <input type="file" id="pic-file" accept="image/*" style="display:none"/>
     ${avatarHtml('large')}
-    <div class="txs td mt4" style="margin-bottom:12px">Toque na foto para alterar</div>
-    ${profEdit?`<div class="fr" style="justify-content:center;max-width:280px;margin:0 auto"><input type="text" id="pni" value="${esc(S.user.name)}" style="flex:1;font-size:16px" autocomplete="name"/><button class="btn-sg" id="sp" aria-label="Salvar" style="display:inline-flex;align-items:center;justify-content:center">${icon('check',18)}</button><button class="btn-sd" id="cp" aria-label="Cancelar" style="display:inline-flex;align-items:center;justify-content:center">${icon('close',18)}</button></div>`
-    :`<div class="osw fw8" style="font-size:22px;letter-spacing:1px">${esc(S.user.name)}</div><button class="btn-sd mt8" id="ep">Editar nome</button>`}
-    <div class="td txs mt8">Membro desde ${new Date(S.user.joinedAt).toLocaleDateString('pt-BR')}</div>
+    ${profEdit?`<div class="fr mt8" style="justify-content:center;max-width:280px;margin:8px auto 0"><input type="text" id="pni" value="${esc(S.user.name)}" style="flex:1;font-size:16px" autocomplete="name"/><button class="btn-sg" id="sp" aria-label="Salvar" style="display:inline-flex;align-items:center;justify-content:center">${icon('check',18)}</button><button class="btn-sd" id="cp" aria-label="Cancelar" style="display:inline-flex;align-items:center;justify-content:center">${icon('close',18)}</button></div>`
+    :`<div class="osw fw8 mt8" style="font-size:20px;letter-spacing:1px;cursor:pointer" id="ep" role="button" aria-label="Editar nome">${esc(S.user.name)} <span style="font-size:11px;color:var(--t3);font-weight:400;letter-spacing:0;font-family:'Barlow',sans-serif">✎ editar</span></div>`}
+    <div class="td txs mt4">Desde ${new Date(S.user.joinedAt).toLocaleDateString('pt-BR')}</div>
   </div>
-  <div class="stats-row" style="grid-template-columns:1fr 1fr">
-    <div class="stat-card"><div class="stat-val">${S.stats.totalWorkouts}</div><div class="stat-lbl">TREINOS</div></div>
-    <div class="stat-card"><div class="stat-val">~${S.stats.totalWorkouts}h</div><div class="stat-lbl">HORAS TOTAIS</div></div>
-    <div class="stat-card"><div class="stat-val">${S.stats.totalPRs}</div><div class="stat-lbl">PRs BATIDOS</div></div>
-    <div class="stat-card"><div class="stat-val">${S.medals.length}</div><div class="stat-lbl">CONQUISTAS</div></div>
+  <div class="stats-row" style="grid-template-columns:1fr 1fr 1fr 1fr;padding:0 16px 14px">
+    <div class="stat-card" style="padding:10px 4px"><div class="stat-val" style="font-size:20px">${S.stats.totalWorkouts}</div><div class="stat-lbl" style="font-size:8px">TREINOS</div></div>
+    <div class="stat-card" style="padding:10px 4px"><div class="stat-val" style="font-size:20px">~${S.stats.totalWorkouts}h</div><div class="stat-lbl" style="font-size:8px">HORAS</div></div>
+    <div class="stat-card" style="padding:10px 4px"><div class="stat-val" style="font-size:20px">${S.stats.totalPRs}</div><div class="stat-lbl" style="font-size:8px">PRs</div></div>
+    <div class="stat-card" style="padding:10px 4px"><div class="stat-val" style="font-size:20px">${S.medals.length}</div><div class="stat-lbl" style="font-size:8px">MEDALHAS</div></div>
   </div>
   ${(function(){
     const p=(S.user&&S.user.profile)||{};
     const imc=calcIMC();const fcmax=getFCMax();
-    const filled=p.weight||p.height||p.age||p.sex;
-    return `<div class="px16 mt16">
-      <div class="sec-title" style="margin-bottom:10px">DADOS FÍSICOS</div>
-      <div class="rcard" style="flex-direction:column;gap:10px;align-items:stretch">
-        <div style="font-size:11px;color:var(--t2);line-height:1.5">Usados para estimar calorias no cardio automaticamente (fórmula baseada em batimentos).</div>
+    return `<div class="px16 mt8">
+      <div class="rcard" style="flex-direction:column;gap:8px;align-items:stretch">
         <div style="display:flex;gap:8px">
-          <div class="cardio-field f1"><label>Peso (kg)</label><input type="number" id="pf-weight" inputmode="decimal" value="${esc(p.weight||'')}" placeholder="0" class="cardio-input"/></div>
-          <div class="cardio-field f1"><label>Altura (cm)</label><input type="number" id="pf-height" inputmode="numeric" value="${esc(p.height||'')}" placeholder="0" class="cardio-input"/></div>
+          <div class="cardio-field f1"><label>PESO (KG)</label><input type="number" id="pf-weight" inputmode="decimal" value="${esc(p.weight||'')}" placeholder="0" class="cardio-input"/></div>
+          <div class="cardio-field f1"><label>ALTURA (CM)</label><input type="number" id="pf-height" inputmode="numeric" value="${esc(p.height||'')}" placeholder="0" class="cardio-input"/></div>
         </div>
         <div style="display:flex;gap:8px">
-          <div class="cardio-field f1"><label>Idade</label><input type="number" id="pf-age" inputmode="numeric" value="${esc(p.age||'')}" placeholder="0" class="cardio-input"/></div>
-          <div class="cardio-field f1"><label>Sexo</label>
+          <div class="cardio-field f1"><label>IDADE</label><input type="number" id="pf-age" inputmode="numeric" value="${esc(p.age||'')}" placeholder="0" class="cardio-input"/></div>
+          <div class="cardio-field f1"><label>SEXO</label>
             <div style="display:flex;gap:6px">
               <button class="sex-btn${p.sex==='M'?' on':''}" data-sex="M" style="flex:1">M</button>
               <button class="sex-btn${p.sex==='F'?' on':''}" data-sex="F" style="flex:1">F</button>
             </div>
           </div>
         </div>
-        <button class="btn-sg" id="pf-save" style="font-size:12px">Salvar dados físicos</button>
-        ${filled&&(imc||fcmax)?`<div style="display:flex;gap:8px;margin-top:2px">
-          ${imc?`<div class="stat-card f1" style="padding:10px 6px"><div class="stat-val" style="font-size:20px">${imc}</div><div class="stat-lbl">IMC · ${imcClass(imc)}</div></div>`:''}
-          ${fcmax?`<div class="stat-card f1" style="padding:10px 6px"><div class="stat-val" style="font-size:20px">${fcmax}</div><div class="stat-lbl">FC MÁX (bpm)</div></div>`:''}
+        ${imc||fcmax?`<div style="display:flex;gap:8px">
+          ${imc?`<div class="f1" style="text-align:center"><span style="font-size:15px;font-weight:800;color:var(--gold);font-family:'Oswald',sans-serif">${imc}</span> <span style="font-size:10px;color:var(--t3)">IMC · ${imcClass(imc)}</span></div>`:''}
+          ${fcmax?`<div class="f1" style="text-align:center"><span style="font-size:15px;font-weight:800;color:var(--gold);font-family:'Oswald',sans-serif">${fcmax}</span> <span style="font-size:10px;color:var(--t3)">FC MÁX</span></div>`:''}
         </div>`:''}
+        <button class="btn-sg" id="pf-save" style="font-size:12px">Salvar</button>
       </div>
       ${(function(){
         const wh=(S.user&&S.user.weightHistory)||[];
-        if(wh.length<1)return '<div style="font-size:11px;color:var(--t3);margin-top:10px;text-align:center">Atualize seu peso a cada semana para acompanhar a evolução.</div><button class="btn-sd" id="pf-add-weight" style="font-size:12px;margin-top:8px">'+icon('chart',14)+' Atualizar peso da semana</button>';
-        const first=wh[0],last=wh[wh.length-1];
-        const diff=Math.round((last.weight-first.weight)*10)/10;
-        const diffTxt=diff===0?'sem variação':(diff>0?'+'+diff+' kg':diff+' kg');
-        const diffColor=diff===0?'var(--t3)':'var(--gold)';
-        // mini gráfico de barras simples
-        const maxW=Math.max(...wh.map(e=>e.weight)),minW=Math.min(...wh.map(e=>e.weight));
-        const range=maxW-minW||1;
-        const recent=wh.slice(-12);
-        const bars=recent.map(e=>{
-          const h=18+((e.weight-minW)/range)*42;
-          const d=new Date(e.date);
-          return '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;min-width:0">'+
-            '<div style="font-size:9px;color:var(--t3)">'+e.weight+'</div>'+
-            '<div style="width:55%;height:'+h+'px;background:linear-gradient(to top,var(--gold-dk),var(--gold));border-radius:2px"></div>'+
-            '<div style="font-size:9px;color:#888">'+('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2)+'</div>'+
-          '</div>';
-        }).join('');
-        return '<div style="margin-top:12px">'+
-          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'+
-            '<span style="font-size:11px;color:var(--t2);letter-spacing:1px;font-weight:700">EVOLUÇÃO DO PESO</span>'+
-            '<span style="font-size:12px;font-weight:800;color:'+diffColor+'">'+diffTxt+'</span>'+
+        if(wh.length<1)return '<div class="rcard" style="margin-top:8px;flex-direction:column;gap:8px;align-items:stretch"><div style="font-size:11px;color:var(--t3);text-align:center">Registre seu peso pra acompanhar a evolução.</div><button class="btn-sd" id="pf-add-weight" style="font-size:12px">'+icon('chart',14)+' Registrar peso</button></div>';
+        const last=wh[wh.length-1];
+        const prev=wh.length>1?wh[wh.length-2]:wh[0];
+        const diff=Math.round((last.weight-prev.weight)*10)/10;
+        const diffTxt=diff===0?'—':(diff>0?'+'+diff:diff)+' kg';
+        const diffColor=diff===0?'var(--t3)':(diff>0?'#e74c3c':'#4caf50');
+        return '<div class="rcard" style="margin-top:8px;flex-direction:column;gap:2px;align-items:stretch">'+
+          '<div style="display:flex;justify-content:space-between;align-items:baseline">'+
+            '<div><span class="osw fw8" style="font-size:22px">'+last.weight+'</span><span style="font-size:11px;color:var(--t3)"> kg</span></div>'+
+            '<div style="font-size:12px;font-weight:800;color:'+diffColor+'">'+diffTxt+'</div>'+
           '</div>'+
-          '<div style="display:flex;align-items:flex-end;gap:2px;height:80px;padding:4px 0">'+bars+'</div>'+
-          '<button class="btn-sd" id="pf-add-weight" style="font-size:12px;margin-top:10px;width:100%">'+icon('chart',14)+' Atualizar peso da semana</button>'+
+          buildWeightLineChart(wh)+
+          '<button class="btn-sd" id="pf-add-weight" style="font-size:11px;margin-top:4px;width:100%">'+icon('chart',13)+' Registrar peso de hoje</button>'+
         '</div>';
       })()}
     </div>`;
   })()}
   <div class="px16 mt16">
-    <div class="sec-title" style="margin-bottom:10px">BACKUP EM NUVEM</div>
-    <div class="rcard" style="flex-direction:column;gap:12px;align-items:stretch">
+    <div class="rcard" style="flex-direction:column;gap:10px;align-items:stretch">
       ${fbUser?`
         <div id="fb-user-info" style="display:flex;align-items:center;gap:10px">
-          ${fbUser.photoURL?`<img src="${fbUser.photoURL}" style="width:36px;height:36px;border-radius:50%;border:2px solid var(--gold)"/>`:`<div style="width:36px;height:36px;border-radius:50%;background:var(--bg3);display:flex;align-items:center;justify-content:center">👤</div>`}
+          ${fbUser.photoURL?`<img src="${fbUser.photoURL}" style="width:32px;height:32px;border-radius:50%;border:2px solid var(--gold)"/>`:`<div style="width:32px;height:32px;border-radius:50%;background:var(--bg3);display:flex;align-items:center;justify-content:center">👤</div>`}
           <div class="f1">
-            <div style="font-size:13px;font-weight:700;color:#fff">${fbUser.displayName||'Usuário'}</div>
+            <div style="font-size:12px;font-weight:700;color:#fff">${fbUser.displayName||'Usuário'}</div>
             <div style="font-size:10px;color:var(--t3)">${fbUser.email}</div>
           </div>
-          <div style="width:8px;height:8px;border-radius:50%;background:#5a9e00"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#5a9e00"></div>
         </div>
         <div style="display:flex;gap:8px">
-          <button class="btn-sg f1" id="cloud-save-btn" style="font-size:12px">☁ Salvar agora</button>
-          <button class="btn-sd f1" id="cloud-load-btn" style="font-size:12px">⬇ Restaurar</button>
+          <button class="btn-sg f1" id="cloud-save-btn" style="font-size:11px">☁ Salvar</button>
+          <button class="btn-sd f1" id="cloud-load-btn" style="font-size:11px">⬇ Restaurar</button>
+          <button class="btn-sd f1" id="cloud-signout" style="font-size:11px;color:var(--t3)">Sair</button>
         </div>
-        <button class="btn-sd" id="cloud-signout" style="font-size:11px;color:var(--t3)">Sair da conta Google</button>
       `:`
-        <div style="font-size:12px;color:var(--t2);line-height:1.6">Entre com sua conta Google para salvar seus treinos na nuvem e acessar de qualquer dispositivo.</div>
         <button class="btn-google" id="cloud-signin">
           <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
-          Entrar com Google
+          Salvar treinos na nuvem
         </button>
       `}
     </div>
   </div>
-  <div class="px16 mt16">
-    <div class="sec-title" style="margin-bottom:10px">BACKUP LOCAL (ARQUIVO)</div>
-    <div class="rcard" style="flex-direction:column;gap:12px;align-items:stretch">
-      <div style="font-size:12px;color:var(--t2);line-height:1.6">Salve uma cópia de todos os seus dados num arquivo, ou restaure a partir de um backup. Útil para trocar de aparelho ou se algo der errado.</div>
-      <div style="display:flex;gap:8px">
-        <button class="btn-sg f1" id="export-data-btn" style="font-size:12px">💾 Exportar</button>
-        <button class="btn-sd f1" id="import-data-btn" style="font-size:12px">📂 Importar</button>
-      </div>
+  <div class="px16 mt8">
+    <div class="rcard" style="gap:8px">
+      <button class="btn-sg f1" id="export-data-btn" style="font-size:12px">💾 Exportar backup</button>
+      <button class="btn-sd f1" id="import-data-btn" style="font-size:12px">📂 Importar</button>
       <input type="file" id="import-file" accept="application/json,.json" style="display:none"/>
     </div>
   </div>
-  <div class="px16 mt16"><button class="btn-dark" id="start-tutorial">🎓 Ver tutorial novamente</button></div>
-  <div class="px16 mt32"><button class="btn-dark" id="rd" style="border-color:var(--danger);color:var(--danger)">⚠ RESETAR TODOS OS DADOS</button></div>
+  <div class="px16 mt8"><button class="btn-dark" id="start-tutorial" style="font-size:12px">Ver tutorial novamente</button></div>
+  <div class="px16 mt16"><button class="btn-dark" id="rd" style="border-color:var(--danger);color:var(--danger);font-size:12px">Resetar todos os dados</button></div>
   </div>`;
 }
 
